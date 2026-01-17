@@ -2,9 +2,9 @@
 
 
 ## 📖 Introduction / 简介
-Adaptive Power Law Channels is a professional-grade TradingView indicator designed for crypto assets (optimized for ETH). Unlike traditional static power law models, this version introduces ATR Dynamic Volatility Correction, effectively filtering out "fake breakouts" during high volatility.
+Adaptive Power Law Channels is a ~~professional-grade~~ TradingView indicator designed for crypto assets (optimized for ETH). Unlike traditional static power law models, this version introduces ATR Dynamic Volatility Correction, ~~effectively~~ filtering out "fake breakouts" during high volatility.
 
-BMNR 自适应幂律通道 是一款专为加密资产（针对 ETH 优化）设计的 专业级 TradingView 指标。不同于传统的静态幂律模型，引入了 ATR 动态波动率修正**，能~~有效~~过滤剧烈波动带来的“假突破”信号。
+BMNR 自适应幂律通道 是一款专为加密资产（针对 ETH 优化）设计的 ~~专业级~~ TradingView 指标。不同于传统的静态幂律模型，引入了 ATR 动态波动率修正**，能~~有效~~过滤剧烈波动带来的“假突破”信号。
 
 ---
 
