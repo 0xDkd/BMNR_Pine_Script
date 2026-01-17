@@ -1,0 +1,124 @@
+//@version=5
+indicator("BMNR Power Law", overlay=true, shorttitle="BMNR Adv Signal")
+
+// ==========================================
+// --- 1. 数据源与基础模型参数 ---
+// ==========================================
+grp_data = "数据源设置"
+eth_ticker = input.symbol("COINBASE:ETHUSD", "ETH 交易对代码", group=grp_data)
+
+grp_model = "基础幂律参数 (Power Law)"
+mid_scale = input.float(0.00057, "中轨 Scale (A)", group=grp_model)
+mid_exp   = input.float(1.3625, "中轨 Exponent (B)", group=grp_model)
+
+top_scale = input.float(0.00097, "上轨 Scale (A)", group=grp_model)
+top_exp   = input.float(1.3144, "上轨 Exponent (B)", group=grp_model)
+
+bot_scale = input.float(0.00148, "下轨 Scale (A)", group=grp_model)
+bot_exp   = input.float(1.2291, "下轨 Exponent (B)", group=grp_model)
+
+// ==========================================
+// --- 2. 进阶波动率修正 (ATR) ---
+// ==========================================
+grp_adv = "波动率动态修正 (过滤假突破)"
+use_atr_adj = input.bool(true, "开启 ATR 弹性轨道？", group=grp_adv)
+atr_period  = input.int(14, "ATR 周期", minval=1, group=grp_adv)
+atr_mult    = input.float(1.0, "ATR 修正系数", step=0.1, group=grp_adv)
+
+// ==========================================
+// --- 3. 显示设置 ---
+// ==========================================
+grp_disp = "显示设置"
+use_filter = input.bool(true, "仅在特定时间内显示信号？", group=grp_disp)
+start_time = input.time(timestamp("2024-01-01 00:00:00"), "显示开始时间", group=grp_disp)
+end_time   = input.time(timestamp("2026-12-31 23:59:59"), "显示结束时间", group=grp_disp)
+
+show_signal = not use_filter or (time >= start_time and time <= end_time)
+
+// ==========================================
+// --- 4. 核心计算逻辑 ---
+// ==========================================
+// 获取 ETH 日线关闭价格
+eth_price_d = request.security(eth_ticker, "D", close, gaps=barmerge.gaps_off)
+
+// 计算基础幂律轨道
+base_top = top_scale * math.pow(eth_price_d, top_exp)
+base_mid = mid_scale * math.pow(eth_price_d, mid_exp)
+base_bot = bot_scale * math.pow(eth_price_d, bot_exp)
+
+// 计算 ATR 修正值
+atr_val = ta.atr(atr_period)
+adj_val = use_atr_adj ? atr_val * atr_mult : 0
+
+// 最终动态轨道
+val_top = base_top + adj_val
+val_mid = base_mid
+val_bot = base_bot - adj_val
+
+// ==========================================
+// --- 5. 绘图与视觉反馈 ---
+// ==========================================
+plot_top = plot(val_top, "动态压力位 (红)", color=color.new(color.red, 0), linewidth=2)
+plot_mid = plot(val_mid, "价值中枢 (蓝)", color=color.new(color.blue, 50), linewidth=1, style=plot.style_linebr)
+plot_bot = plot(val_bot, "动态支撑位 (绿)", color=color.new(color.green, 0), linewidth=2)
+
+// 填充区间
+fill(plot_top, plot_bot, color=color.new(color.gray, 95), title="估值合理区")
+
+// 信号判定
+is_buy  = ta.crossunder(close, val_bot) and show_signal
+is_sell = ta.crossover(close, val_top) and show_signal
+
+// 绘制图标
+plotshape(is_buy,  title="抄底", style=shape.arrowup,   location=location.belowbar, color=color.green, size=size.normal, text="BUY")
+plotshape(is_sell, title="逃顶", style=shape.arrowdown, location=location.abovebar, color=color.red,   size=size.normal, text="SELL")
+
+// 极端行情背景高亮
+bgcolor(show_signal and close <= val_bot ? color.new(color.green, 90) : na)
+bgcolor(show_signal and close >= val_top ? color.new(color.red, 90) : na)
+
+// ==========================================
+// --- 6. 实时状态面板 (Dashboard) ---
+// ==========================================
+var table panel = table.new(position.top_right, 2, 4, border_width=1, border_color=color.gray)
+if barstate.islast
+    premium = (close - val_mid) / val_mid * 100
+    status_color = close >= val_top ? color.red : (close <= val_bot ? color.green : color.gray)
+    
+    table.cell(panel, 0, 0, "基准 ETH", bgcolor=color.gray, text_color=color.white)
+    table.cell(panel, 1, 0, str.tostring(eth_price_d, "#.##"), bgcolor=color.black, text_color=color.white)
+    
+    table.cell(panel, 0, 1, "偏离度", bgcolor=color.gray, text_color=color.white)
+    table.cell(panel, 1, 1, str.tostring(premium, "#.1") + "%", bgcolor=status_color, text_color=color.white)
+
+    table.cell(panel, 0, 2, "轨道宽度 (ATR)", bgcolor=color.gray, text_color=color.white)
+    table.cell(panel, 1, 2, str.tostring(adj_val, "#.##"), bgcolor=color.black, text_color=color.white)
+
+    table.cell(panel, 0, 3, "当前价格", bgcolor=color.gray, text_color=color.white)
+    table.cell(panel, 1, 3, str.tostring(close, "#.##"), bgcolor=color.black, text_color=color.white)
+
+// ==========================================
+// --- 7. 预设警报逻辑 (用于 Telegram 推送) ---
+// ==========================================
+
+// 构造推送文本
+string buy_msg = "🟢 **BMNR 抄底预警**\n" + 
+                 "------------------\n" +
+                 "当前价格: " + str.tostring(close, "#.####") + "\n" +
+                 "支撑位(下轨): " + str.tostring(val_bot, "#.####") + "\n" +
+                 "ETH参考价: " + str.tostring(eth_price_d, "#.##") + "\n" +
+                 "偏离度: " + str.tostring((close - val_mid) / val_mid * 100, "#.1") + "%"
+
+string sell_msg = "🔴 **BMNR 逃顶预警**\n" + 
+                  "------------------\n" +
+                  "当前价格: " + str.tostring(close, "#.####") + "\n" +
+                  "压力位(上轨): " + str.tostring(val_top, "#.####") + "\n" +
+                  "ETH参考价: " + str.tostring(eth_price_d, "#.##") + "\n" +
+                  "偏离度: " + str.tostring((close - val_mid) / val_mid * 100, "#.1") + "%"
+
+// 触发逻辑
+if is_buy
+    alert(buy_msg, alert.freq_once_per_bar_close) // 每次收盘确认破位才发，减少误报
+
+if is_sell
+    alert(sell_msg, alert.freq_once_per_bar_close)
